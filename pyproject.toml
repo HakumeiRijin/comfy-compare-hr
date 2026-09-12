@@ -1,0 +1,16 @@
+[project]
+name = "image-compare-viewer"
+version = "0.1.0"
+description = "Windows 11専用・個人利用の軽量画像比較ビューア"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.7",
+    "Pillow>=10.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/image_compare"]

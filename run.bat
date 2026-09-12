@@ -1,13 +1,5 @@
 @echo off
-REM Image Compare Viewer 起動用バッチファイル
-REM このファイルをダブルクリックすると、ウィンドウを最小化した状態で起動します。
-REM ターミナルから直接実行したい場合は、末尾に minimized を付けてください:
-REM   run.bat minimized  ← 最小化せず、ログを見ながら実行
-
-if /i not "%~1"=="minimized" (
-    start /min "" "%~f0" minimized
-    exit /b
-)
-
+REM Image Compare Viewer �N���p�o�b�`�t�@�C��
+REM ���̃t�@�C�����_�u���N���b�N����ƋN�����܂��B
 cd /d "%~dp0"
 uv run python -m image_compare

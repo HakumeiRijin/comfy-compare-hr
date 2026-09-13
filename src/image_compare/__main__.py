@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QMenu,
 )
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QIcon
 
 from image_compare.image_view import ImageTile
 from image_compare.layout_rules import columns_for_count
@@ -42,6 +42,10 @@ MAX_ZOOM = 20.0
 ZOOM_STEP = 1.15  # ホイール1クリックあたりの倍率変化
 
 WINDOW_TITLE = "Image Compare Viewer"
+
+# アイコンファイル: プロジェクトルート直下の assets フォルダに配置する想定。
+# __main__.py は src/image_compare/__main__.py にあるため、3階層上がルート。
+ICON_PATH = Path(__file__).resolve().parent.parent.parent / "assets" / "icon.ico"
 
 
 class LeftClickOnlyMenu(QMenu):
@@ -63,6 +67,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(1000, 700)
+
+        if ICON_PATH.is_file():
+            self.setWindowIcon(QIcon(str(ICON_PATH)))
 
         self.setAcceptDrops(True)
 

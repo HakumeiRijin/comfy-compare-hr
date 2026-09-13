@@ -8,7 +8,9 @@
 操作体系(マウスのみで完結させる方針):
 - 左クリック(ドラッグなし): Fit⇔100%表示トグル
 - 左ドラッグ: 全画像同期パン
-- 右クリック: コンテキストメニュー表示(削除・全削除・オーバーレイ切替・Fitリセット)
+- 右クリック: コンテキストメニュー表示(このタイルを削除・すべてのタイルを削除・
+  オーバーレイ表示切替)。Qt標準のcontextMenuEvent経由で扱い、
+  左クリックの処理経路とは完全に分離している。
 - ホイール: 全画像同期ズーム
 """
 from pathlib import Path
@@ -52,19 +54,16 @@ class ImageTile(QFrame):
         self.on_left_clicked: Optional[Callable[["ImageTile"], None]] = None
         # 右クリックをMainWindowに伝えるコールバック(コンテキストメニュー表示用)
         # 引数: (このタイル, 画面上でのグローバル座標)
+        # Qt標準のcontextMenuEventから呼ばれるため、右クリックのpress/releaseが
+        # 完結した後の、独立したイベントとして安全に発火する
+        # (mousePressEvent側で直接menu.exec()を呼ぶと、右クリックの
+        #  イベント処理そのものがメニューを閉じるまで完了しないため、
+        #  左クリック等の後続イベントと処理が絡み合いやすくなる)
         self.on_context_menu_requested: Optional[Callable[["ImageTile", "QPointF"], None]] = None
 
         self._is_dragging = False
         self._last_mouse_pos: Optional[QPointF] = None
         self._drag_moved = False
-
-        # コンテキストメニュー表示中、およびメニューが閉じた直後の短い間、
-        # マウス入力を一時的に無視したい場合に立てるフラグ。
-        # メニュー外をクリックして閉じた場合、そのクリックは「メニューを
-        # 閉じる」動作として一度消費された後、直後に新しい独立したクリック
-        # イベントとしてこのタイルに配送されることがあるため、
-        # MainWindow側でメニューが閉じた後も一定時間Trueを維持する。
-        self.suppress_input: bool = False
 
         self._load_image()
 
@@ -118,26 +117,15 @@ class ImageTile(QFrame):
         event.accept()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if self.suppress_input:
-            event.ignore()
-            return
         if event.button() == Qt.MouseButton.LeftButton:
             self._is_dragging = True
             self._drag_moved = False
             self._last_mouse_pos = event.position()
             event.accept()
             return
-        if event.button() == Qt.MouseButton.RightButton:
-            if self.on_context_menu_requested is not None:
-                self.on_context_menu_requested(self, event.globalPosition())
-            event.accept()
-            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if self.suppress_input:
-            event.ignore()
-            return
         if self._is_dragging and self._last_mouse_pos is not None:
             current_pos = event.position()
             dx = current_pos.x() - self._last_mouse_pos.x()
@@ -152,13 +140,6 @@ class ImageTile(QFrame):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if self.suppress_input:
-            # メニュー表示中に押されたクリックのreleaseがここに遅れて
-            # 届いた場合でも、ドラッグ状態を確実に後始末してから無視する
-            self._is_dragging = False
-            self._last_mouse_pos = None
-            event.ignore()
-            return
         if event.button() == Qt.MouseButton.LeftButton and self._is_dragging:
             self._is_dragging = False
             self._last_mouse_pos = None
@@ -169,20 +150,18 @@ class ImageTile(QFrame):
             return
         super().mouseReleaseEvent(event)
 
-    def force_reset_drag_state(self) -> None:
-        """ドラッグ中の内部状態を強制的にクリアする。
-
-        コンテキストメニューを開く直前など、何らかの理由で
-        mouseReleaseEventが正しく届かず _is_dragging が残ってしまう
-        ケースに備えた保険。
-        """
-        self._is_dragging = False
-        self._last_mouse_pos = None
-        self._drag_moved = False
-
     def contextMenuEvent(self, event) -> None:
-        # 右クリックはmousePressEvent側で独自メニューを出すため、
-        # OS標準のコンテキストメニューは出さない
+        """Qt標準のコンテキストメニュー通知。右クリックはここで一元的に扱う。
+
+        mousePressEventの中で直接menu.exec()を呼ぶと、右クリックという
+        1つのマウスイベントの処理そのものがメニューが閉じるまで完了せず、
+        その後の左クリック等のイベント配送と絡み合う原因になっていた。
+        contextMenuEventはQtが「右クリックの一連の操作(press+release)が
+        完結した後」に独立して発火させる通知のため、ここでメニューを
+        表示すれば、左クリックの処理と経路が交わらない。
+        """
+        if self.on_context_menu_requested is not None:
+            self.on_context_menu_requested(self, event.globalPos())
         event.accept()
 
     def paintEvent(self, event) -> None:

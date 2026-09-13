@@ -5,12 +5,14 @@
 操作体系(マウスのみで完結させる方針):
 - 左クリック(ドラッグなし): Fit⇔100%表示トグル
 - 左ドラッグ: 全画像同期パン
-- 右クリック: コンテキストメニュー表示(このタイルを削除・全画像を削除・
-  オーバーレイ表示切替・Fit表示にリセット)
+- 右クリック: コンテキストメニュー表示(このタイルを削除・すべてのタイルを削除・
+  オーバーレイ表示切替)。ImageTile側のcontextMenuEvent経由で発火するため、
+  左クリックの処理経路とは完全に分離している。
 - ホイール: 全画像同期ズーム
 """
 import math
 import sys
+import time
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -22,7 +24,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QMenu,
 )
-from PySide6.QtCore import Qt, QPointF, QTimer
+from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
 from image_compare.image_view import ImageTile
@@ -70,14 +72,14 @@ class MainWindow(QMainWindow):
         # 全タイル共通のズーム倍率（仕様書10章: 全画像で常に同一の値を共有）
         self.shared_zoom: float = 1.0
 
-        # 現在100%表示モードかどうか(Trueの場合は次の左クリックでFitに切り替わる)
-        # ズーム・パン・リセット・新規ドロップ・削除などの操作が起きると
-        # 必ずTrueに戻す(=次の左クリックは必ずFitになる)。左クリックのたびに
-        # このフラグを反転させる。
-        self.is_100_percent_mode: bool = True
-
         # ファイル名・倍率のオーバーレイ表示/非表示(右クリックメニューで全タイル共通にトグル)
         self.overlay_visible: bool = False
+
+        # 直近でコンテキストメニューが閉じた時刻(time.monotonic())。
+        # メニュー外をクリックして閉じる操作は、Qtの仕様上「メニューを閉じる」
+        # ことと「その位置への通常のクリック」を兼ねてしまうため、
+        # 閉じた直後の短い間に発生した左クリックは無視して誤発火を防ぐ。
+        self._context_menu_closed_at: float = 0.0
 
         # 画像タイルを並べるグリッドコンテナ
         self.grid_container = QWidget()
@@ -174,7 +176,6 @@ class MainWindow(QMainWindow):
 
         # 仕様書9章: 新しい画像セットが追加されたら初期Fit状態(倍率1.0)に戻す
         self.shared_zoom = 1.0
-        self.is_100_percent_mode = True
 
         self._rebuild_grid()
 
@@ -250,10 +251,6 @@ class MainWindow(QMainWindow):
 
         zoom_ratio = new_zoom / old_zoom
 
-        # ホイール操作でズームすると「Fitでも、ちょうど100%でもない」状態になるため、
-        # 次に左クリックしたときは必ずFitから開始するようにしておく
-        self.is_100_percent_mode = True
-
         self.shared_zoom = new_zoom
         for tile in self.tiles:
             tile.zoom_factor = self.shared_zoom
@@ -265,10 +262,6 @@ class MainWindow(QMainWindow):
 
         仕様書11章: 移動量はピクセル単位でよく、正規化・相対座標化は不要。
         """
-        # パン操作を行うと「ちょうど100%」の位置関係ではなくなるため、
-        # 次に左クリックしたときは必ずFitから開始するようにしておく
-        self.is_100_percent_mode = True
-
         delta = QPointF(dx, dy)
         for tile in self.tiles:
             tile.pan_offset = tile.pan_offset + delta
@@ -277,59 +270,78 @@ class MainWindow(QMainWindow):
     def _handle_tile_left_clicked(self, clicked_tile: ImageTile) -> None:
         """左クリック(ドラッグなし)でFit⇔100%表示をトグルする。
 
+        「次に何をすべきか」を独立したフラグで管理すると、ズーム・パンなど
+        他の操作で状態が変わった際にフラグとの整合性が崩れる(1回クリック
+        しても見た目が変化しないなどの不具合につながる)。そのため、
+        「現在ちょうどFit状態かどうか」を shared_zoom の値から都度判定する。
+
         clicked_tileを基準に、全タイル共通のzoom_factorを切り替える。
         画像サイズが異なるタイルが混在する場合、他タイルの見た目上の%は
         clicked_tile基準の値からズレるが、これはホイールでの同期ズームと
         同じ仕様(全タイルでzoom_factorという1つの値を共有する)であり、
         混在を前提としない運用では実質的に問題にならない。
         """
+        # メニュー外クリックでメニューを閉じた場合、Qtの仕様上そのクリックが
+        # 「閉じる」動作の直後に独立した通常のクリックとしても配送される。
+        # メニューが閉じた直後の短い間に発生した左クリックは、
+        # 「閉じるためだけのクリック」とみなして無視する。
+        MENU_CLOSE_IGNORE_WINDOW = 0.2  # 秒
+        if time.monotonic() - self._context_menu_closed_at < MENU_CLOSE_IGNORE_WINDOW:
+            return
+
         base_scale = clicked_tile.fit_scale()
         if base_scale <= 0:
             return
 
-        if self.is_100_percent_mode:
-            # 100% -> Fit に戻す（Fitリセットと同じ状態にする）
-            new_zoom = 1.0
-            self.is_100_percent_mode = False
+        is_currently_fit = self.shared_zoom == 1.0
+
+        if is_currently_fit:
+            # Fit -> 100% (画像の実ピクセルサイズ) にする
+            new_zoom = 1.0 / base_scale
             self.shared_zoom = new_zoom
             for tile in self.tiles:
                 tile.zoom_factor = new_zoom
-                tile.pan_offset = QPointF(0.0, 0.0)
                 tile.update()
             return
 
-        # Fit -> 100% (画像の実ピクセルサイズ) にする
-        new_zoom = 1.0 / base_scale
-        self.is_100_percent_mode = True
+        # Fit以外(100%表示中、または他の倍率) -> Fit に戻す
+        new_zoom = 1.0
         self.shared_zoom = new_zoom
         for tile in self.tiles:
             tile.zoom_factor = new_zoom
+            tile.pan_offset = QPointF(0.0, 0.0)
             tile.update()
 
-    def _handle_tile_context_menu(self, clicked_tile: ImageTile, global_pos: QPointF) -> None:
-        """右クリックでコンテキストメニューを表示する。"""
+    def _handle_tile_context_menu(self, clicked_tile: ImageTile, global_pos) -> None:
+        """右クリックでコンテキストメニューを表示する。
+
+        contextMenuEvent経由で呼ばれるため、右クリック自体のpress/releaseは
+        既に完結している。
+
+        メニュー外をクリックして閉じる操作はQtの正当な仕様として、
+        「メニューを閉じる」と「そのクリック位置に対する通常のクリック」の
+        両方の意味を持つ。そのため、メニューが閉じた直後、新しい独立した
+        左クリックのmousePressEvent/mouseReleaseEventがこのタイルに発生し、
+        Fit⇔100%トグルが誤って実行されてしまう。
+        これを防ぐため、メニューが閉じた時刻を記録し、その直後の短い間に
+        発生した左クリックは無視する。
+
+        なお、メニュー表示中に同じ位置で右クリックするとメニューが閉じる
+        (再表示はされない)。これはQtの標準的な挙動で、実害が小さいため
+        あえて変更していない。同じ位置での右クリックを検知して自動的に
+        再表示させる仕組みも試したが、Qtの内部的なイベント処理と相性が
+        悪く、かえって不安定になったため見送った。
+        """
         menu = LeftClickOnlyMenu(self)
 
-        remove_action = menu.addAction("この画像を削除")
-        clear_action = menu.addAction("すべての画像を削除")
+        remove_action = menu.addAction("このタイルを削除")
+        clear_action = menu.addAction("すべてのタイルを削除")
         menu.addSeparator()
-        overlay_label = "ファイル名/倍率の表示をオフ" if self.overlay_visible else "ファイル名/倍率の表示をオン"
+        overlay_label = "オーバーレイ表示をオフ" if self.overlay_visible else "オーバーレイ表示をオン"
         overlay_action = menu.addAction(overlay_label)
-        menu.addSeparator()
-        reset_action = menu.addAction("Fit表示にリセット")
 
-        # メニュー表示中は全タイルのマウス入力を無視させる。
-        # 加えて、メニュー外をクリックして閉じた場合、そのクリックは
-        # 「メニューを閉じる」動作として消費された後、直後に新しい独立した
-        # クリックイベントとして背後のタイルに配送されることがある
-        # (menu.exec()が返ってきた"後"に mousePressEvent が発生する)。
-        # そのため、メニューが閉じた直後も少しの間 suppress_input を
-        # 維持し、閉じるためのクリックがトグルとして扱われないようにする。
-        for tile in self.tiles:
-            tile.force_reset_drag_state()
-            tile.suppress_input = True
-        chosen = menu.exec(global_pos.toPoint())
-        QTimer.singleShot(100, self._clear_all_suppress_input)
+        chosen = menu.exec(global_pos)
+        self._context_menu_closed_at = time.monotonic()
 
         if chosen == remove_action:
             self.remove_tile(clicked_tile)
@@ -337,21 +349,6 @@ class MainWindow(QMainWindow):
             self.clear_all_tiles()
         elif chosen == overlay_action:
             self.toggle_overlay()
-        elif chosen == reset_action:
-            self.reset_view()
-
-    def _clear_all_suppress_input(self) -> None:
-        for tile in self.tiles:
-            tile.suppress_input = False
-
-    def reset_view(self) -> None:
-        """仕様書12章: Fit/Reset。全画像の倍率・位置を初期状態に戻す。"""
-        self.shared_zoom = 1.0
-        self.is_100_percent_mode = True
-        for tile in self.tiles:
-            tile.zoom_factor = 1.0
-            tile.pan_offset = QPointF(0.0, 0.0)
-            tile.update()
 
     def remove_tile(self, target_tile: ImageTile) -> None:
         """指定した画像を表示から取り除く（ファイル自体は削除しない）。"""
@@ -361,8 +358,6 @@ class MainWindow(QMainWindow):
         except ValueError:
             # 同一パスが重複ドロップされていた場合など、念のため無視して継続
             pass
-        # 削除後も「次の左クリックは必ずFitから開始する」を一貫させる
-        self.is_100_percent_mode = True
         self._rebuild_grid()
 
     def toggle_overlay(self) -> None:
@@ -378,7 +373,6 @@ class MainWindow(QMainWindow):
             return
         self.image_paths = []
         self.shared_zoom = 1.0
-        self.is_100_percent_mode = True
         self._rebuild_grid()
 
 

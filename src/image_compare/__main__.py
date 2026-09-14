@@ -6,8 +6,8 @@
 - 左クリック(ドラッグなし): Fit⇔100%表示トグル
 - 左ドラッグ: 全画像同期パン
 - 右クリック: コンテキストメニュー表示(このタイルを削除・すべてのタイルを削除・
-  オーバーレイ表示切替)。ImageTile側のcontextMenuEvent経由で発火するため、
-  左クリックの処理経路とは完全に分離している。
+  オーバーレイ表示切替・メタデータを表示)。ImageTile側のcontextMenuEvent経由で
+  発火するため、左クリックの処理経路とは完全に分離している。
 - ホイール: 全画像同期ズーム
 """
 import math
@@ -29,6 +29,7 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent, QIcon
 
 from image_compare.image_view import ImageTile
 from image_compare.layout_rules import columns_for_count
+from image_compare.metadata.viewer_window import MetadataWindow
 
 # 仕様書4章: 対応画像形式
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -75,6 +76,9 @@ class MainWindow(QMainWindow):
 
         self.image_paths: list[Path] = []
         self.tiles: list[ImageTile] = []
+
+        # 開いたメタデータウィンドウへの参照を保持する(GC対策)
+        self.metadata_windows: list[MetadataWindow] = []
 
         # 全タイル共通のズーム倍率（仕様書10章: 全画像で常に同一の値を共有）
         self.shared_zoom: float = 1.0
@@ -346,6 +350,8 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         overlay_label = "オーバーレイ表示をオフ" if self.overlay_visible else "オーバーレイ表示をオン"
         overlay_action = menu.addAction(overlay_label)
+        menu.addSeparator()
+        metadata_action = menu.addAction("メタデータを表示")
 
         chosen = menu.exec(global_pos)
         self._context_menu_closed_at = time.monotonic()
@@ -356,6 +362,8 @@ class MainWindow(QMainWindow):
             self.clear_all_tiles()
         elif chosen == overlay_action:
             self.toggle_overlay()
+        elif chosen == metadata_action:
+            self.show_metadata(clicked_tile)
 
     def remove_tile(self, target_tile: ImageTile) -> None:
         """指定した画像を表示から取り除く（ファイル自体は削除しない）。"""
@@ -373,6 +381,17 @@ class MainWindow(QMainWindow):
         for tile in self.tiles:
             tile.overlay_visible = self.overlay_visible
             tile.update()
+
+    def show_metadata(self, target_tile: ImageTile) -> None:
+        """右クリックメニューから、指定タイルの画像のメタデータ別ウィンドウを開く。
+
+        開いたウィンドウへの参照をself.metadata_windowsに保持しておく必要がある。
+        保持しないと、Pythonのガベージコレクションによってウィンドウの実体が
+        すぐに破棄され、開いた直後にウィンドウが消えてしまう。
+        """
+        window = MetadataWindow(target_tile.image_path, parent=self)
+        self.metadata_windows.append(window)
+        window.show()
 
     def clear_all_tiles(self) -> None:
         """表示中の画像をすべてクリアする（ファイルは削除しない）。"""

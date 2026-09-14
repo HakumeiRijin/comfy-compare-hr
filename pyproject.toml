@@ -1,10 +1,10 @@
 [project]
 name = "image-compare-viewer"
-version = "0.1.0"
+version = "0.2.1"
 description = "Windows 11専用・個人利用の軽量画像比較ビューア"
 requires-python = ">=3.10"
 dependencies = [
-    "PySide6>=6.7",
+    "PySide6-Essentials>=6.7",
     "Pillow>=10.0",
 ]
 

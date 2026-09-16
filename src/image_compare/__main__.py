@@ -6,8 +6,9 @@
 - 左クリック(ドラッグなし): Fit⇔100%表示トグル
 - 左ドラッグ: 全画像同期パン
 - 右クリック: コンテキストメニュー表示(このタイルを削除・すべてのタイルを削除・
-  オーバーレイ表示切替・メタデータを表示)。ImageTile側のcontextMenuEvent経由で
-  発火するため、左クリックの処理経路とは完全に分離している。
+  オーバーレイ表示切替・この画像のメタデータを表示・すべての画像のメタデータを表示)。
+  ImageTile側のcontextMenuEvent経由で発火するため、
+  左クリックの処理経路とは完全に分離している。
 - ホイール: 全画像同期ズーム
 """
 import math
@@ -23,13 +24,14 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QStackedWidget,
     QMenu,
+    QDialog,
 )
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QIcon
 
 from image_compare.image_view import ImageTile
 from image_compare.layout_rules import columns_for_count
-from image_compare.metadata.viewer_window import MetadataWindow
+from image_compare.metadata.viewer_window import MetadataWindow, MultiMetadataWindow
 
 # 仕様書4章: 対応画像形式
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -78,7 +80,7 @@ class MainWindow(QMainWindow):
         self.tiles: list[ImageTile] = []
 
         # 開いたメタデータウィンドウへの参照を保持する(GC対策)
-        self.metadata_windows: list[MetadataWindow] = []
+        self.metadata_windows: list[QDialog] = []
 
         # 全タイル共通のズーム倍率（仕様書10章: 全画像で常に同一の値を共有）
         self.shared_zoom: float = 1.0
@@ -351,7 +353,8 @@ class MainWindow(QMainWindow):
         overlay_label = "オーバーレイ表示をオフ" if self.overlay_visible else "オーバーレイ表示をオン"
         overlay_action = menu.addAction(overlay_label)
         menu.addSeparator()
-        metadata_action = menu.addAction("メタデータを表示")
+        metadata_action = menu.addAction("この画像のメタデータを表示")
+        metadata_all_action = menu.addAction("すべての画像のメタデータを表示")
 
         chosen = menu.exec(global_pos)
         self._context_menu_closed_at = time.monotonic()
@@ -364,6 +367,8 @@ class MainWindow(QMainWindow):
             self.toggle_overlay()
         elif chosen == metadata_action:
             self.show_metadata(clicked_tile)
+        elif chosen == metadata_all_action:
+            self.show_all_metadata()
 
     def remove_tile(self, target_tile: ImageTile) -> None:
         """指定した画像を表示から取り除く（ファイル自体は削除しない）。"""
@@ -390,6 +395,12 @@ class MainWindow(QMainWindow):
         すぐに破棄され、開いた直後にウィンドウが消えてしまう。
         """
         window = MetadataWindow(target_tile.image_path, parent=self)
+        self.metadata_windows.append(window)
+        window.show()
+
+    def show_all_metadata(self) -> None:
+        """右クリックメニューから、表示中の全画像のメタデータを横並びで開く。"""
+        window = MultiMetadataWindow(self.image_paths, parent=self)
         self.metadata_windows.append(window)
         window.show()
 

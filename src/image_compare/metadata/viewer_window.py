@@ -5,9 +5,11 @@
 タブUI・スクロール同期の作り込みは、まずこの土台で表示できることを
 確認してから、必要性を見極めて追加していく。
 """
+import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -20,6 +22,31 @@ from PySide6.QtWidgets import (
 
 from image_compare.layout_rules import columns_for_count
 from image_compare.metadata.reader import read_text_metadata
+
+# JSON整形後のテキスト表示に使う等幅フォント。Windowsに標準で入っている
+# Consolasを指定する(見つからない環境では、Qtが自動的に代替フォントを選ぶ)。
+MONOSPACE_FONT_FAMILY = "Consolas"
+MONOSPACE_FONT_SIZE = 11
+
+
+def _format_for_display(value: str) -> str:
+    """メタデータの値を、可能であればインデント付きの読みやすい形に整形する。
+
+    ComfyUIのprompt/workflowはJSON形式の文字列だが、改行のない1行の
+    まま埋め込まれているため、そのままではとても読みにくい。
+    json.loads→json.dumps(indent=2)で階層構造を字下げ表示にする。
+    ensure_ascii=Falseを指定しないと日本語が\\uXXXXの形にエスケープ
+    されたままになるため、これも明示的に指定する。
+
+    JSON形式でない値だった場合は、整形せず元の文字列をそのまま返す
+    (仕様書16章の方針にならい、想定外の内容でもクラッシュさせない)。
+    """
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return value
+
+    return json.dumps(parsed, indent=2, ensure_ascii=False)
 
 
 def _build_metadata_panel(
@@ -61,8 +88,9 @@ def _build_metadata_panel(
         layout.addWidget(key_label)
 
         text_edit = QTextEdit()
-        text_edit.setPlainText(value)
+        text_edit.setPlainText(_format_for_display(value))
         text_edit.setReadOnly(True)
+        text_edit.setFont(QFont(MONOSPACE_FONT_FAMILY, MONOSPACE_FONT_SIZE))
         # 内容量に応じて自然な高さになるよう、大まかな目安を設定する
         text_edit.setMinimumHeight(150)
         layout.addWidget(text_edit)

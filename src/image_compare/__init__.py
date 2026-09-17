@@ -1,3 +1,3 @@
 """Image Compare Viewer - Windows 11専用の軽量画像比較ビューア"""
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"

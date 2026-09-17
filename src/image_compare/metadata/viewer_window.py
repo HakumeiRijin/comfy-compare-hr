@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from image_compare.layout_rules import columns_for_count
-from image_compare.metadata.reader import read_text_metadata
+from image_compare.metadata.reader import read_text_metadata, read_exif_metadata
 
 # JSON整形後のテキスト表示に使う等幅フォント。Windowsに標準で入っている
 # Consolasを指定する(見つからない環境では、Qtが自動的に代替フォントを選ぶ)。
@@ -62,6 +62,9 @@ def _build_metadata_panel(
     (1枚版はウィンドウタイトルに既にファイル名が出るため重複を避ける)。
     excluded_keysに含まれるキーは表示から除外する
     (全画像版でworkflowのような分量の多いキーを省くために使う)。
+
+    PNGのテキストメタデータ(text_data)とEXIF(exif_data)の両方を対象とし、
+    どちらか一方でも見つかればそれを表示する。
     """
     panel = QWidget()
     layout = QVBoxLayout(panel)
@@ -72,30 +75,44 @@ def _build_metadata_panel(
         layout.addWidget(title_label)
 
     text_data = read_text_metadata(image_path)
+    exif_data = read_exif_metadata(image_path)
 
-    if not text_data:
+    if not text_data and not exif_data:
         no_data_label = QLabel("テキストメタデータは見つかりませんでした。")
         no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(no_data_label)
         return panel
 
-    for key, value in text_data.items():
-        if key in excluded_keys:
-            continue
+    if text_data:
+        for key, value in text_data.items():
+            if key in excluded_keys:
+                continue
+            _add_metadata_field(layout, key, _format_for_display(value))
 
-        key_label = QLabel(f"[{key}]")
-        key_label.setStyleSheet("font-weight: bold;")
-        layout.addWidget(key_label)
-
-        text_edit = QTextEdit()
-        text_edit.setPlainText(_format_for_display(value))
-        text_edit.setReadOnly(True)
-        text_edit.setFont(QFont(MONOSPACE_FONT_FAMILY, MONOSPACE_FONT_SIZE))
-        # 内容量に応じて自然な高さになるよう、大まかな目安を設定する
-        text_edit.setMinimumHeight(150)
-        layout.addWidget(text_edit)
+    if exif_data:
+        for key, value in exif_data.items():
+            if key in excluded_keys:
+                continue
+            # EXIFの値はJSON形式ではないため、整形(_format_for_display)は
+            # 通さずそのまま表示する
+            _add_metadata_field(layout, key, value)
 
     return panel
+
+
+def _add_metadata_field(layout: QVBoxLayout, key: str, text: str) -> None:
+    """見出しラベル+読み取り専用テキストエリアを1組、レイアウトに追加する。"""
+    key_label = QLabel(f"[{key}]")
+    key_label.setStyleSheet("font-weight: bold;")
+    layout.addWidget(key_label)
+
+    text_edit = QTextEdit()
+    text_edit.setPlainText(text)
+    text_edit.setReadOnly(True)
+    text_edit.setFont(QFont(MONOSPACE_FONT_FAMILY, MONOSPACE_FONT_SIZE))
+    # 内容量に応じて自然な高さになるよう、大まかな目安を設定する
+    text_edit.setMinimumHeight(150)
+    layout.addWidget(text_edit)
 
 
 class MetadataWindow(QDialog):

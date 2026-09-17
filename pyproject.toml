@@ -2,6 +2,7 @@
 name = "image-compare-viewer"
 version = "0.5.0"
 description = "Windows 11専用・個人利用の軽量画像比較ビューア"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "PySide6-Essentials>=6.7",

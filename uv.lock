@@ -3,8 +3,8 @@ revision = 3
 requires-python = ">=3.10"
 
 [[package]]
-name = "image-compare-viewer"
-version = "0.5.0"
+name = "comfy-compare-hr"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "pillow" },

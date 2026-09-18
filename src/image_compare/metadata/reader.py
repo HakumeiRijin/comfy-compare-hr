@@ -24,8 +24,7 @@ def read_text_metadata(image_path: Path) -> Optional[dict[str, str]]:
     """画像パスを受け取り、PNGのテキストメタデータを辞書で返す。
 
     見つからない場合、または読み取りに失敗した場合はNoneを返す
-    (仕様書16章の方針にならい、失敗してもクラッシュさせず呼び出し元に
-    委ねる)。
+    (失敗してもクラッシュさせず呼び出し元に委ねる方針)。
     """
     try:
         with Image.open(image_path) as img:

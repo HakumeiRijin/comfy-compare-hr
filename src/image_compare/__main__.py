@@ -1,6 +1,7 @@
-"""Image Compare Viewer エントリポイント。
+"""ComfyCompare-HR エントリポイント。
 
-`uv run python -m image_compare` で起動する。
+`uv run python -m image_compare` で起動する(内部パッケージ名は
+image_compareのまま変更していない)。
 
 操作体系(マウスのみで完結させる方針):
 - 左クリック(ドラッグなし): Fit⇔100%表示トグル
@@ -33,10 +34,10 @@ from image_compare.image_view import ImageTile
 from image_compare.layout_rules import columns_for_count
 from image_compare.metadata.viewer_window import MetadataWindow, MultiMetadataWindow
 
-# 仕様書4章: 対応画像形式
+# 対応画像形式
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
-# 仕様書6章: 表示枚数の目標上限
+# 表示枚数の目標上限
 MAX_IMAGES = 8
 
 # ズームの倍率レンジ（極端な値による描画崩れ・無限拡大を防ぐ）
@@ -44,7 +45,7 @@ MIN_ZOOM = 0.1
 MAX_ZOOM = 20.0
 ZOOM_STEP = 1.15  # ホイール1クリックあたりの倍率変化
 
-WINDOW_TITLE = "Image Compare Viewer"
+WINDOW_TITLE = "ComfyCompare-HR"
 
 # アイコンファイル: プロジェクトルート直下の assets フォルダに配置する想定。
 # __main__.py は src/image_compare/__main__.py にあるため、3階層上がルート。
@@ -82,7 +83,7 @@ class MainWindow(QMainWindow):
         # 開いたメタデータウィンドウへの参照を保持する(GC対策)
         self.metadata_windows: list[QDialog] = []
 
-        # 全タイル共通のズーム倍率（仕様書10章: 全画像で常に同一の値を共有）
+        # 全タイル共通のズーム倍率（全画像で常に同一の値を共有）
         self.shared_zoom: float = 1.0
 
         # ファイル名・倍率のオーバーレイ表示/非表示(右クリックメニューで全タイル共通にトグル)
@@ -181,13 +182,13 @@ class MainWindow(QMainWindow):
 
         self.image_paths.extend(valid_paths)
 
-        # 仕様書6章: 上限を超えたら先頭MAX_IMAGES枚のみ採用
+        # 上限を超えたら先頭MAX_IMAGES枚のみ採用
         if len(self.image_paths) > MAX_IMAGES:
             overflow = len(self.image_paths) - MAX_IMAGES
             print(f"[DROP] 上限{MAX_IMAGES}枚を超えたため、末尾{overflow}件を無視します")
             self.image_paths = self.image_paths[:MAX_IMAGES]
 
-        # 仕様書9章: 新しい画像セットが追加されたら初期Fit状態(倍率1.0)に戻す
+        # 新しい画像セットが追加されたら初期Fit状態(倍率1.0)に戻す
         self.shared_zoom = 1.0
 
         self._rebuild_grid()
@@ -273,7 +274,7 @@ class MainWindow(QMainWindow):
     def _handle_pan_drag(self, dx: float, dy: float) -> None:
         """いずれかのタイルでのドラッグ移動量を、全タイルに同期反映する。
 
-        仕様書11章: 移動量はピクセル単位でよく、正規化・相対座標化は不要。
+        移動量はピクセル単位でよく、正規化・相対座標化は不要。
         """
         delta = QPointF(dx, dy)
         for tile in self.tiles:
@@ -341,9 +342,7 @@ class MainWindow(QMainWindow):
 
         なお、メニュー表示中に同じ位置で右クリックするとメニューが閉じる
         (再表示はされない)。これはQtの標準的な挙動で、実害が小さいため
-        あえて変更していない。同じ位置での右クリックを検知して自動的に
-        再表示させる仕組みも試したが、Qtの内部的なイベント処理と相性が
-        悪く、かえって不安定になったため見送った。
+        あえて変更していない。
         """
         menu = LeftClickOnlyMenu(self)
 

@@ -1,5 +1,5 @@
 @echo off
-REM Image Compare Viewer 起動用バッチファイル
-REM このファイルをダブルクリックすると起動します。
+REM ComfyCompare-HR launcher
+REM Double-click this file to start the app.
 cd /d "%~dp0"
 uv run python -m image_compare

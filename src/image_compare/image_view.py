@@ -2,8 +2,7 @@
 
 倍率(zoom_factor)とオフセット(pan_offset)は MainWindow が一元管理し、
 このクラスは「指示された通りに描画する」「操作イベントを通知する」だけの
-受動的な部品とする。
-(仕様書15章: 重複更新防止のため、状態変更の発生源を1箇所に絞る)
+受動的な部品とする(重複更新防止のため、状態変更の発生源を1箇所に絞る)。
 
 操作体系(マウスのみで完結させる方針):
 - 左クリック(ドラッグなし): Fit⇔100%表示トグル
@@ -68,8 +67,8 @@ class ImageTile(QFrame):
         self._load_image()
 
     def _load_image(self) -> None:
-        # 仕様書16章: 壊れた画像・読み込み不能な画像・存在しないファイルで
-        # クラッシュしないよう、想定外の例外も含めて広く捕捉する。
+        # 壊れた画像・読み込み不能な画像・存在しないファイルでクラッシュ
+        # しないよう、想定外の例外も含めて広く捕捉する。
         try:
             if not self.image_path.is_file():
                 self.load_error = True
@@ -82,14 +81,6 @@ class ImageTile(QFrame):
         except Exception as exc:  # noqa: BLE001 - 個人利用ツールのため広く捕捉して継続を優先
             print(f"[ERROR] 画像の読み込みに失敗しました: {self.image_path} ({exc})")
             self.load_error = True
-
-    def has_image(self) -> bool:
-        return self._original_pixmap is not None
-
-    def image_size(self):
-        if self._original_pixmap is None:
-            return None
-        return self._original_pixmap.size()
 
     def fit_scale(self) -> float:
         """このタイルの領域に画像を収めるための倍率(Fit時の基準倍率)。"""

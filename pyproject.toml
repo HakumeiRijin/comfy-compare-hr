@@ -1,6 +1,6 @@
 [project]
-name = "image-compare-viewer"
-version = "0.5.0"
+name = "comfy-compare-hr"
+version = "1.0.0"
 description = "Windows 11専用・個人利用の軽量画像比較ビューア"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"

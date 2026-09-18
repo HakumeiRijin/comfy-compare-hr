@@ -1,3 +1,3 @@
-"""Image Compare Viewer - Windows 11専用の軽量画像比較ビューア"""
+"""ComfyCompare-HR - Windows 11専用の軽量画像比較ビューア"""
 
-__version__ = "0.5.0"
+__version__ = "1.0.0"

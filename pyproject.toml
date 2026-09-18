@@ -2,6 +2,7 @@
 name = "comfy-compare-hr"
 version = "1.0.0"
 description = "Windows 11専用・個人利用の軽量画像比較ビューア"
+readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
